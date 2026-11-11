@@ -10,4 +10,4 @@ Vazirmatn by Saber Rastikerdar — SIL Open Font License 1.1 (via `@fontsource/v
 Lucide icons (https://lucide.dev) — ISC License. Bundled as an inline SVG sprite in `index.html`.
 
 ## Exercise videos
-External links to aparat.com; videos belong to the channels named in the app.
+Played in-app through Aparat's official embed player (iframe, loaded only when opened), with a link to the original page; videos belong to the channels named in the app.
