@@ -283,3 +283,5 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .ex{contain-intrinsic-size:auto 560px}.hist{contain-intrinsic-size:auto 92px}.plist li{contain-intrinsic-size:auto 64px}
 .top,.tabs,.mini{contain:layout paint}
 .timer,.np{contain:strict}
+
+.plist .x.dl{color:var(--mut)}.plist .x.dl.done{color:var(--ok)}.plist .x.busy{opacity:.4;pointer-events:none}

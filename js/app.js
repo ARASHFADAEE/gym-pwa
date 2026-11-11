@@ -335,10 +335,13 @@ const idb = (() => {
 
 /* ---------- music player ---------- */
 const audio = $('#audio');
-const MUSIC_CACHE = 'gym-music-v2';
+// optional offline copies of built-in (cross-origin, no CORS) tracks: stored as opaque responses,
+// served by the SW only for URLs in this cache. Everything else streams straight from the network.
+const OFF_CACHE = 'gym-offline-v1';
+const normUrl = (u) => { try { return new URL(u, location.href).href; } catch { return u; } };
 let playlist = TRACKS.map(t => ({ ...t, id: 'b:' + t.src, builtin: true }));
 let mState = LS.get('music', { shuffle: false, repeat: 'all', last: null });
-let order = [], pos = -1, cachedSet = new Set();
+let order = [], pos = -1, offSet = new Set(), wantPlay = false, errStreak = 0, retried = null;
 const curTrack = () => playlist[order[pos]];
 function buildOrder(keepId) {
   order = playlist.map((_, i) => i);
@@ -355,23 +358,35 @@ async function loadCustom() {
     buildOrder(keep || mState.last);
   } catch (e) { console.warn('idb', e); buildOrder(mState.last); }
 }
-async function refreshCached() {
+async function refreshOffline() {
   if (!('caches' in window)) return;
-  try { const c = await caches.open(MUSIC_CACHE); cachedSet = new Set((await c.keys()).map(r => new URL(r.url).pathname)); } catch { }
+  try { const c = await caches.open(OFF_CACHE); offSet = new Set((await c.keys()).map(r => r.url)); } catch { }
 }
-const isCached = (t) => !t.builtin || cachedSet.has(new URL(t.src, location.href).pathname);
-async function cacheTrack(t) {
-  if (!t?.builtin || !('caches' in window) || isCached(t)) return;
-  try { const c = await caches.open(MUSIC_CACHE); const u = new URL(t.src, location.href); await c.add(u.href); cachedSet.add(u.pathname); if (curTab === 'music') renderPlaylist(); } catch (e) { console.warn('cache fail', e); }
+const isOffline = (t) => !t.builtin || offSet.has(normUrl(t.src));
+const swPost = (msg) => navigator.serviceWorker?.controller?.postMessage(msg);
+async function downloadTrack(t) {
+  if (!t?.builtin || isOffline(t)) return true;
+  if (!navigator.serviceWorker?.controller) { toast('برای دانلود، اپ رو یک بار ببند و دوباره باز کن'); return false; }
+  try {
+    const r = await fetch(t.src, { mode: 'no-cors', cache: 'no-store' }); // opaque: server sends no CORS headers
+    const c = await caches.open(OFF_CACHE); const u = normUrl(t.src);
+    await c.put(u, r); offSet.add(u); swPost({ type: 'off-add', url: u }); return true;
+  } catch (e) { console.warn('download fail', t.title, e); return false; }
+}
+async function removeOffline(t) {
+  const c = await caches.open(OFF_CACHE); const u = normUrl(t.src);
+  await c.delete(u); offSet.delete(u); swPost({ type: 'off-del', url: u });
 }
 function playAt(p, autoplay = true) {
   if (!order.length) return;
+  const prevT = curTrack();
   pos = (p + order.length) % order.length;
-  const t = curTrack(); audio.src = t.src; mState.last = t.id; LS.set('music', mState);
-  if (autoplay) audio.play().catch(e => console.warn(e));
-  setMediaSession(t); updatePlayerUI(); cacheTrack(t);
+  const t = curTrack(); audio.preload = 'auto'; audio.src = t.src;
+  if (prevT && prevT !== t && $('#plist')) { markRow(prevT); markRow(t); } mState.last = t.id; LS.set('music', mState);
+  if (autoplay) { wantPlay = true; audio.play().catch(e => { if (e.name !== 'AbortError') console.info('play:', e.message); }); }
+  setMediaSession(t); updatePlayerUI();
 }
-function togglePlay() { haptic(); if (pos < 0 || !audio.src) { playAt(Math.max(0, pos)); return; } audio.paused ? audio.play() : audio.pause(); }
+function togglePlay() { haptic(); if (pos < 0 || !audio.src) { playAt(Math.max(0, pos)); return; } if (audio.paused) { wantPlay = true; if (audio.error) playAt(pos); else audio.play().catch(() => { }); } else { wantPlay = false; audio.pause(); } }
 function next(auto = false) {
   if (!order.length) return;
   if (auto && mState.repeat === 'off' && pos === order.length - 1) { audio.pause(); updatePlayerUI(); return; }
@@ -381,7 +396,15 @@ function prev() { if (audio.currentTime > 4) { audio.currentTime = 0; return; } 
 audio.addEventListener('ended', () => { if (mState.repeat === 'one') { audio.currentTime = 0; audio.play(); } else next(true); });
 ['play', 'pause', 'loadedmetadata'].forEach(ev => audio.addEventListener(ev, updatePlayerUI));
 audio.addEventListener('timeupdate', () => updateProgress());
-audio.addEventListener('error', () => { if (audio.getAttribute('src')) toast('پخش ممکن نشد — شاید آفلاینی و آهنگ ذخیره نشده'); });
+audio.addEventListener('playing', () => { errStreak = 0; retried = null; });
+audio.addEventListener('error', () => {
+  const t = curTrack(); if (!t || !audio.getAttribute('src') || !wantPlay) return;
+  // downloaded track + freshly started SW: give it one retry before skipping
+  if (isOffline(t) && t.builtin && retried !== t.id) { retried = t.id; setTimeout(() => { audio.src = t.src; audio.play().catch(() => { }); }, 400); return; }
+  errStreak++;
+  if (errStreak >= Math.min(order.length, 5)) { wantPlay = false; toast(navigator.onLine ? 'لینک‌ها باز نمی‌شن — بعداً دوباره امتحان کن' : 'اینترنت وصل نیست — آهنگ‌های دانلودشده یا فایل‌های گوشی رو پخش کن'); updatePlayerUI(); return; }
+  toast(`«${t.title}» باز نشد — آهنگ بعدی`); next();
+});
 function setMediaSession(t) {
   if (!('mediaSession' in navigator)) return;
   navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: 'باشگاه آرش', artwork: [192, 512].map(s => ({ src: new URL(`icons/icon-${s}.png`, location.href).href, sizes: `${s}x${s}`, type: 'image/png' })) });
@@ -447,39 +470,60 @@ function renderMusic() {
     v.append(npc);
     const tools = h(`<div class="tools" style="margin-bottom:12px">
       <label class="btn">${ic('upload', 'sm')} افزودن از گوشی<input type="file" id="addfiles" accept="audio/*" multiple hidden></label>
-      <button class="btn" id="dlall">${ic('cloud-download', 'sm')} ذخیره آفلاین</button></div>`);
+      <button class="btn" id="dlall">${ic('cloud-download', 'sm')} دانلود همه</button></div>`);
     $('#addfiles', tools).onchange = async (e) => {
       const files = [...e.target.files]; if (!files.length) return;
       for (const f of files) await idb.put({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: f.name.replace(/\.[^.]+$/, ''), blob: f, added: Date.now() });
       await loadCustom(); renderPlaylist(); toast(`${fa(files.length)} آهنگ اضافه شد`); e.target.value = '';
     };
     $('#dlall', tools).onclick = async (e) => {
-      const btn = e.currentTarget; btn.disabled = true; const info = $('#dlinfo');
-      const todo = playlist.filter(t => t.builtin && !isCached(t)); let i = 0;
-      for (const t of todo) { info.textContent = `در حال ذخیره ${fa(++i)} از ${fa(todo.length)} — ${t.title}`; await cacheTrack(t); }
-      await refreshCached(); renderPlaylist(); btn.disabled = false;
-      const missing = playlist.filter(t => !isCached(t)).length;
-      info.textContent = missing ? `${fa(missing)} آهنگ ذخیره نشد — اینترنت رو چک کن` : 'همه آهنگ‌ها برای آفلاین آماده‌ان';
+      const btn = e.currentTarget; const info = $('#dlstore');
+      const todo = playlist.filter(t => t.builtin && !isOffline(t));
+      if (!todo.length) { if (confirm('همه آهنگ‌ها دانلود شدن. نسخه‌های آفلاین حذف بشن؟')) { for (const t of playlist.filter(x => x.builtin)) await removeOffline(t); renderPlaylist(); showStorage(); } return; }
+      btn.disabled = true; let i = 0, fail = 0;
+      for (const t of todo) { info.textContent = `در حال دانلود ${fa(++i)} از ${fa(todo.length)} — ${t.title}`; if (!(await downloadTrack(t))) fail++; else markRow(t); }
+      btn.disabled = false; renderPlaylist();
+      info.textContent = fail ? `${fa(fail)} آهنگ دانلود نشد — اینترنت رو چک کن` : 'همه آهنگ‌ها برای آفلاین دانلود شدن';
+      showStorage(true);
     };
     v.append(tools);
     v.append(h(`<div class="card"><div class="sec-title">${ic('flame')} فونک (Phonk) <span class="mut small" style="margin-inline-start:auto;font-weight:400" id="pl-count"></span></div>
-      <p class="mut small" id="dlinfo" style="margin:-6px 0 8px">دریفت، برزیلی و اگرسیو — با اولین پخش برای آفلاین ذخیره می‌شن.</p><ul class="plist" id="plist"></ul></div>`));
+      <p class="mut small" id="dlinfo" style="margin:-6px 0 8px">این لیست از لینک‌های خودت پخش می‌شه و اینترنت لازم داره. با دکمه ${'<b>دانلود</b>'} کنار هر آهنگ می‌تونی برای آفلاین نگهش داری (روی کروم اندروید). آهنگ‌هایی که از گوشی اضافه می‌کنی همیشه آفلاین‌اند.</p><p class="mut small" id="dlstore" style="margin:-4px 0 8px"></p><ul class="plist" id="plist"></ul></div>`));
   }
   renderPlaylist();
 }
+async function showStorage(force) {
+  if (!navigator.storage?.estimate || (!force && !offSet.size)) return;
+  const { usage } = await navigator.storage.estimate(); const el = $('#dlstore');
+  if (el) el.textContent = ''; if (el && offSet.size) el.textContent = `${fa(offSet.size)} آهنگ آفلاین — فضای اشغال‌شده حدود ${fa(Math.round(usage / 1048576))} مگابایت`;
+}
+function markRow(t) { const li = $(`#plist li[data-id="${CSS.escape(t.id)}"]`); if (li) li.replaceWith(plRow(t, playlist.indexOf(t))); }
 function renderPlaylist() {
   const ul = $('#plist'); if (!ul) return; ul.innerHTML = '';
   $('#pl-count').textContent = `${fa(playlist.length)} آهنگ`;
-  playlist.forEach((t, i) => {
-    const li = h(`<li data-id="${esc(t.id)}"><span class="num"><span class="n">${t.builtin ? fa(i + 1) : ic('music', 'sm')}</span></span>
-      <span class="t"><b>${esc(t.title)}</b><small>${esc(t.artist)}${t.builtin ? ' · ' + esc(t.license) : ''}${isCached(t) && t.builtin ? ` <span class="off">${ic('circle-check-big', 'xs')} آفلاین</span>` : ''}</small></span>
-      ${t.builtin ? '' : `<button class="x" aria-label="حذف">${ic('trash-2', 'sm')}</button>`}</li>`);
-    li.onclick = (e) => { if (e.target.closest('.x')) return; haptic(); const p = order.indexOf(i); if (order[pos] === i) togglePlay(); else playAt(p); };
-    const x = $('.x', li); if (x) x.onclick = async () => { if (!confirm(`«${t.title}» حذف بشه؟`)) return; await idb.del(t.dbId); await loadCustom(); renderPlaylist(); updatePlayerUI(); };
-    ul.append(li);
-  });
+  const frag = document.createDocumentFragment();
+  playlist.forEach((t, i) => frag.append(plRow(t, i)));
+  ul.append(frag);
   updatePlayerUI();
-  $$('#plist li.cur .num').forEach(n => { n.innerHTML = '<span class="eq"><i></i><i></i><i></i><i></i></span>'; });
+}
+
+function plRow(t, i) {
+  const off = t.builtin && isOffline(t);
+  const li = h(`<li data-id="${esc(t.id)}"><span class="num"><span class="n">${t.builtin ? fa(i + 1) : ic('music', 'sm')}</span></span>
+    <span class="t"><b>${esc(t.title)}</b><small>${esc(t.artist)}${off ? ` <span class="off">${ic('circle-check-big', 'xs')} آفلاین</span>` : ''}</small></span>
+    ${t.builtin ? `<button class="x dl ${off ? 'done' : ''}" aria-label="${off ? 'حذف نسخه آفلاین' : 'دانلود برای آفلاین'}">${ic(off ? 'circle-check-big' : 'download', 'sm')}</button>` : `<button class="x" aria-label="حذف">${ic('trash-2', 'sm')}</button>`}</li>`);
+  li.onclick = (e) => { if (e.target.closest('.x')) return; haptic(); const p = order.indexOf(i); if (order[pos] === i) togglePlay(); else playAt(p); };
+  const x = $('.x', li);
+  x.onclick = async () => {
+    haptic();
+    if (!t.builtin) { if (!confirm(`«${t.title}» حذف بشه؟`)) return; await idb.del(t.dbId); await loadCustom(); renderPlaylist(); updatePlayerUI(); return; }
+    if (isOffline(t)) { if (!confirm(`نسخه آفلاین «${t.title}» حذف بشه؟`)) return; await removeOffline(t); markRow(t); return; }
+    x.disabled = true; x.classList.add('busy');
+    const ok = await downloadTrack(t); toast(ok ? `«${t.title}» برای آفلاین ذخیره شد` : 'دانلود نشد — اینترنت رو چک کن');
+    markRow(t); showStorage();
+  };
+  if (order[pos] === i) { li.classList.add('cur'); if (!audio.paused) li.classList.add('playing'); $('.num', li).innerHTML = '<span class="eq"><i></i><i></i><i></i><i></i></span>'; }
+  return li;
 }
 
 /* ---------- about / backup ---------- */
@@ -505,8 +549,7 @@ function renderAbout() {
     e.target.value = '';
   };
   v.append(bk);
-  v.append(h(`<details class="card"><summary>${ic('music')} اعتبار موزیک‌ها (Credits) ${ic('chevron-down', 'chev')}</summary><p class="small mut">همه آهنگ‌های داخلی از Free Music Archive با مجوز آزاد (CC BY 4.0 یا CC0)؛ برای حجم کمتر به MP3 ۱۲۸kbps تبدیل شدن.</p>
-    <ul class="credits">${TRACKS.map(t => `<li>"${esc(t.title)}" by ${esc(t.artist)} — <a href="${t.source}" target="_blank" rel="noopener">Free Music Archive</a> — Licensed under <a href="${t.licenseUrl}" target="_blank" rel="noopener">${esc(t.license)}</a></li>`).join('')}</ul></details>`));
+  v.append(h(`<div class="card small mut"><div class="sec-title" style="color:var(--txt)">${ic('music')} موزیک</div>لیست داخلی مستقیماً از لینک‌هایی که خودت انتخاب کردی پخش می‌شه؛ هیچ فایل صوتی داخل اپ نیست. حق نشر هر آهنگ متعلق به صاحبش است.</div>`));
   v.append(h(`<div class="card small mut"><div class="sec-title" style="color:var(--txt)">${ic('info')} سایر</div>ویدیوهای آموزشی لینک به آپارات‌اند (نیاز به اینترنت) و متعلق به کانال‌های ذکرشده. فونت: وزیرمتن (SIL OFL). آیکون‌ها: Lucide (ISC).</div>`));
 }
 
@@ -515,9 +558,9 @@ const idle = (fn) => ('requestIdleCallback' in window ? requestIdleCallback(fn, 
 (async () => {
   updateHeader(); renderWorkout();
   await new Promise(r => idle(r));
-  await refreshCached(); await loadCustom();
+  await refreshOffline(); await loadCustom();
   const last = playlist.findIndex(t => t.id === mState.last);
-  if (last >= 0) { pos = order.indexOf(last); audio.src = curTrack().src; setMediaSession(curTrack()); }
+  if (last >= 0) { pos = order.indexOf(last); audio.preload = 'none'; audio.src = curTrack().src; setMediaSession(curTrack()); }
   updatePlayerUI();
 })();
 if ('serviceWorker' in navigator) {
