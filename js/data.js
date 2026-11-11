@@ -105,24 +105,21 @@ export const DAYS = [
 // Sat=Day1, Sun=Day2, Tue=Day3, Wed=Day4  (JS getDay: Sun=0 ... Sat=6)
 export const WEEK_MAP = { 6: 1, 0: 2, 2: 3, 3: 4 };
 
-const IC = (file, title) => ({
-  src: `music/${file}.mp3`, title, artist: 'Kevin MacLeod',
-  source: `https://incompetech.com/music/royalty-free/mp3-royaltyfree/${encodeURIComponent(title)}.mp3`,
-  license: 'CC BY 4.0',
-});
+// پلی‌لیست فونک — همه از Free Music Archive با مجوز CC BY 4.0 یا CC0 (لایسنس از صفحه هر آهنگ بررسی شده)
 export const TRACKS = [
-  IC('funkorama', 'Funkorama'),
-  IC('funky-chunk', 'Funky Chunk'),
-  IC('groove-grove', 'Groove Grove'),
-  IC('werq', 'Werq'),
-  IC('hustle', 'Hustle'),
-  IC('volatile-reaction', 'Volatile Reaction'),
-  IC('raving-energy', 'Raving Energy'),
-  IC('pamgaea', 'Pamgaea'),
-  IC('movement-proposition', 'Movement Proposition'),
-  IC('cut-and-run', 'Cut and Run'),
-  IC('rollin-at-5', 'Rollin at 5'),
-  IC('getting-it-done', 'Getting it Done'),
-  IC('exhilarate', 'Exhilarate'),
-  IC('funk-game-loop', 'Funk Game Loop'),
+  { src: 'music/hard-phonk-gym-workout-track.mp3', title: "Hard Phonk Gym Workout Track", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/hard-phonk-gym-workout-track/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/aggressive-phonk-drift-for-car-edits.mp3', title: "Aggressive Phonk Drift for Car Edits", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/aggressive-phonk-drift-for-car-edits/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/brazilian-phonk-with-heavy-bass-drop.mp3', title: "Brazilian Phonk With Heavy Bass Drop", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/brazilian-phonk-with-heavy-bass-drop/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/phonk-drift-racing-montage.mp3', title: "Phonk Drift Racing Montage", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/phonk-drift-racing-montage/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/brazilian-phonk-bounce-for-dance-reels.mp3', title: "Brazilian Phonk Bounce for Dance Reels", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/brazilian-phonk-bounce-for-dance-reels/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/sacred-drift-dark-choral-phonk.mp3', title: "Sacred Drift - Dark Choral Phonk", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/sacred-drift-dark-choral-phonk/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/phonk-ish.mp3', title: "Phonk ish", artist: "HoliznaCC0", source: "https://freemusicarchive.org/music/holiznacc0/phonk-aura-farming/phonk-ish/", license: "CC0 1.0", licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/" },
+  { src: 'music/phonk-brazilian-aura-short-loop.mp3', title: "Phonk Brazilian Aura Short Loop", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/phonk-brazilian-aura-short-loop/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/neon-synthwave-phonk-for-cyberpunk-visuals.mp3', title: "Neon Synthwave Phonk for Cyberpunk Visuals", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/neon-synthwave-phonk-for-cyberpunk-visuals/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/phonk-music-3.mp3', title: "Phonk Music", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/hip-hop-phonk-trap-beats/phonk-music-3/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/t4k3-d0p3.mp3', title: "t4k3 d0p3", artist: "DJ HU15051", source: "https://freemusicarchive.org/music/dj-hu15051/free-phonk/dj-hu15051-t4k3-d0p3/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/retro-phonk-aura-with-vintage-synths.mp3', title: "Retro Phonk Aura With Vintage Synths", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/retro-phonk-aura-with-vintage-synths/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/phonk-remix.mp3', title: "Phonk Remix", artist: "HoliznaCC0", source: "https://freemusicarchive.org/music/holiznacc0/phonk-aura-farming/phonk-remix/", license: "CC0 1.0", licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/" },
+  { src: 'music/phonk-house-hybrid-with-classical-sample.mp3', title: "Phonk House Hybrid With Classical Sample", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/phonk-drift/phonk-house-hybrid-with-classical-sample/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
+  { src: 'music/phonk-songs.mp3', title: "Phonk Songs", artist: "Alex Morgan", source: "https://freemusicarchive.org/music/alex-morgan/hip-hop-phonk-trap-beats/phonk-songs/", license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/" },
 ];

@@ -1,7 +1,7 @@
 // Service worker — باشگاه آرش
-const VERSION = 'v2-0c5aeeec31';
+const VERSION = 'v3-ef31ed6f54';
 const SHELL = 'gym-shell-' + VERSION;
-const MUSIC = 'gym-music-v1';
+const MUSIC = 'gym-music-v2';
 const PRECACHE = [
  "./",
  "css/style.css",
@@ -30,7 +30,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('gym-shell-') && k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => (k.startsWith('gym-shell-') && k !== SHELL) || (k.startsWith('gym-music-') && k !== MUSIC)).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 async function rangeFrom(res, range) {

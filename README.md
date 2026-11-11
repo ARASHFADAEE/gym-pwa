@@ -9,7 +9,7 @@ A personal, installable, offline-first workout tracker + music player (Persian /
 - تایمر استراحت دایره‌ای تمام‌صفحه با بوق و ویبره (±۱۵ ثانیه، رد کردن، کوچک کردن)
 - لینک ویدیوی آموزشی آپارات برای هر حرکت + نکات فرم صحیح
 - تاریخچه جلسات، ثبت هفتگی وزن و دور کمر با نمودار
-- موزیک‌پلیر با ۱۴ آهنگ فانک/انرژی‌بخش آزاد (CC BY)، کنترل از صفحه قفل، افزودن آهنگ از گوشی
+- موزیک‌پلیر با ۱۵ آهنگ فونک (دریفت/برزیلی/اگرسیو) با مجوز آزاد CC BY / CC0، کنترل از صفحه قفل، افزودن آهنگ از گوشی
 - پشتیبان‌گیری/بازیابی JSON — همه داده‌ها فقط روی گوشی (localStorage / IndexedDB)
 
 ## نصب روی گوشی
@@ -31,4 +31,4 @@ Any static HTTPS host works (own subdomain with SSL, Netlify, Cloudflare Pages�
 When you change files, bump the cache by editing `VERSION` in `sw.js`.
 
 ## Credits
-See [CREDITS.md](CREDITS.md): music by Kevin MacLeod (CC BY 4.0), Vazirmatn font (OFL), Lucide icons (ISC).
+See [CREDITS.md](CREDITS.md): phonk tracks from Free Music Archive (CC BY 4.0 / CC0), Vazirmatn font (OFL), Lucide icons (ISC).

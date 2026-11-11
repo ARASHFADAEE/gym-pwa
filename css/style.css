@@ -274,3 +274,5 @@ tr:last-child td{border-bottom:0}
 @media (min-width:700px){.np-art{width:320px}}
 
 .np-next{margin-top:auto;padding-top:var(--sp4);color:var(--mut);font-size:.82rem;max-width:90%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.plist .t b,.mini-info b,.np-card .t b{unicode-bidi:plaintext;text-align:right}

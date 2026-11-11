@@ -311,7 +311,7 @@ const idb = (() => {
 
 /* ---------- music player ---------- */
 const audio = $('#audio');
-const MUSIC_CACHE = 'gym-music-v1';
+const MUSIC_CACHE = 'gym-music-v2';
 let playlist = TRACKS.map(t => ({ ...t, id: 'b:' + t.src, builtin: true }));
 let mState = LS.get('music', { shuffle: false, repeat: 'all', last: null });
 let order = [], pos = -1, cachedSet = new Set();
@@ -428,8 +428,8 @@ function renderMusic() {
       info.textContent = missing ? `${fa(missing)} آهنگ ذخیره نشد — اینترنت رو چک کن` : 'همه آهنگ‌ها برای آفلاین آماده‌ان';
     };
     v.append(tools);
-    v.append(h(`<div class="card"><div class="sec-title">${ic('flame')} فانک و انرژی <span class="mut small" style="margin-inline-start:auto;font-weight:400" id="pl-count"></span></div>
-      <p class="mut small" id="dlinfo" style="margin:-6px 0 8px">آهنگ‌ها با اولین پخش برای آفلاین ذخیره می‌شن.</p><ul class="plist" id="plist"></ul></div>`));
+    v.append(h(`<div class="card"><div class="sec-title">${ic('flame')} فونک (Phonk) <span class="mut small" style="margin-inline-start:auto;font-weight:400" id="pl-count"></span></div>
+      <p class="mut small" id="dlinfo" style="margin:-6px 0 8px">دریفت، برزیلی و اگرسیو — با اولین پخش برای آفلاین ذخیره می‌شن.</p><ul class="plist" id="plist"></ul></div>`));
   }
   renderPlaylist();
 }
@@ -438,7 +438,7 @@ function renderPlaylist() {
   $('#pl-count').textContent = `${fa(playlist.length)} آهنگ`;
   playlist.forEach((t, i) => {
     const li = h(`<li data-id="${esc(t.id)}"><span class="num"><span class="n">${t.builtin ? fa(i + 1) : ic('music', 'sm')}</span></span>
-      <span class="t"><b>${esc(t.title)}</b><small>${esc(t.artist)}${t.builtin ? ' · CC BY 4.0' : ''}${isCached(t) && t.builtin ? ` <span class="off">${ic('circle-check-big', 'xs')} آفلاین</span>` : ''}</small></span>
+      <span class="t"><b>${esc(t.title)}</b><small>${esc(t.artist)}${t.builtin ? ' · ' + esc(t.license) : ''}${isCached(t) && t.builtin ? ` <span class="off">${ic('circle-check-big', 'xs')} آفلاین</span>` : ''}</small></span>
       ${t.builtin ? '' : `<button class="x" aria-label="حذف">${ic('trash-2', 'sm')}</button>`}</li>`);
     li.onclick = (e) => { if (e.target.closest('.x')) return; haptic(); const p = order.indexOf(i); if (order[pos] === i) togglePlay(); else playAt(p); };
     const x = $('.x', li); if (x) x.onclick = async () => { if (!confirm(`«${t.title}» حذف بشه؟`)) return; await idb.del(t.dbId); await loadCustom(); renderPlaylist(); updatePlayerUI(); };
@@ -471,8 +471,8 @@ function renderAbout() {
     e.target.value = '';
   };
   v.append(bk);
-  v.append(h(`<details class="card"><summary>${ic('music')} اعتبار موزیک‌ها (Credits) ${ic('chevron-down', 'chev')}</summary><p class="small mut">همه آهنگ‌های داخلی از Kevin MacLeod با مجوز Creative Commons Attribution 4.0؛ برای حجم کمتر به MP3 ۹۶kbps تبدیل شدن.</p>
-    <ul class="credits">${TRACKS.map(t => `<li>"${esc(t.title)}" Kevin MacLeod (<a href="https://incompetech.com" target="_blank" rel="noopener">incompetech.com</a>) — Licensed under Creative Commons: By Attribution 4.0 License <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">creativecommons.org/licenses/by/4.0</a></li>`).join('')}</ul></details>`));
+  v.append(h(`<details class="card"><summary>${ic('music')} اعتبار موزیک‌ها (Credits) ${ic('chevron-down', 'chev')}</summary><p class="small mut">همه آهنگ‌های داخلی از Free Music Archive با مجوز آزاد (CC BY 4.0 یا CC0)؛ برای حجم کمتر به MP3 ۱۲۸kbps تبدیل شدن.</p>
+    <ul class="credits">${TRACKS.map(t => `<li>"${esc(t.title)}" by ${esc(t.artist)} — <a href="${t.source}" target="_blank" rel="noopener">Free Music Archive</a> — Licensed under <a href="${t.licenseUrl}" target="_blank" rel="noopener">${esc(t.license)}</a></li>`).join('')}</ul></details>`));
   v.append(h(`<div class="card small mut"><div class="sec-title" style="color:var(--txt)">${ic('info')} سایر</div>ویدیوهای آموزشی لینک به آپارات‌اند (نیاز به اینترنت) و متعلق به کانال‌های ذکرشده. فونت: وزیرمتن (SIL OFL). آیکون‌ها: Lucide (ISC).</div>`));
 }
 
