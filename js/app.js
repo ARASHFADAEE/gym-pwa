@@ -12,9 +12,12 @@ const toNum = (s) => { if (s == null) return NaN; const t = String(s).trim().rep
 const ymd = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const faDate = (s, opts = { weekday: 'long', day: 'numeric', month: 'long' }) => new Date(s + 'T12:00:00').toLocaleDateString('fa-IR-u-ca-persian', opts);
 const mmss = (sec) => { sec = Math.max(0, Math.round(sec)); return `${fa(Math.floor(sec / 60))}:${fa(sec % 60).padStart(2, '۰')}`; };
+// localStorage with in-memory cache (parse once, not on every render)
+let dataVer = 0; const lsMem = new Map();
 const LS = {
-  get(k, d) { try { const v = JSON.parse(localStorage.getItem('gym.' + k)); return v ?? d; } catch { return d; } },
-  set(k, v) { localStorage.setItem('gym.' + k, JSON.stringify(v)); },
+  get(k, d) { if (lsMem.has(k)) return lsMem.get(k) ?? d; let v = null; try { v = JSON.parse(localStorage.getItem('gym.' + k)); } catch { } lsMem.set(k, v); return v ?? d; },
+  set(k, v) { lsMem.set(k, v); if (k !== 'music') dataVer++; localStorage.setItem('gym.' + k, JSON.stringify(v)); },
+  reset() { lsMem.clear(); dataVer++; },
 };
 const haptic = (p = 8) => { try { navigator.vibrate?.(p); } catch { } };
 let toastT;
@@ -22,13 +25,19 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 
 /* ---------- tabs ---------- */
 let curTab = 'workout';
+// views are rendered once and only re-rendered when their data changed
+const viewVer = {}; const scrollPos = {};
+const RENDER = { workout: () => renderWorkout(), history: () => renderHistory(), body: () => renderBody(), music: () => renderMusic(), about: () => renderAbout() };
 function showTab(name) {
+  if (curTab) scrollPos[curTab] = window.scrollY;
   curTab = name;
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
-  ({ workout: renderWorkout, history: renderHistory, body: renderBody, music: renderMusic, about: renderAbout })[name]?.();
-  window.scrollTo({ top: 0 });
+  if (name === 'music') renderMusic();
+  else if (viewVer[name] !== dataVer) { RENDER[name](); viewVer[name] = dataVer; }
+  window.scrollTo(0, scrollPos[name] || 0);
 }
+const markFresh = (name) => { viewVer[name] = dataVer; };
 $$('.tabs button').forEach(b => b.addEventListener('click', () => { haptic(); if (b.dataset.tab !== curTab) showTab(b.dataset.tab); }));
 
 /* ---------- workout data ---------- */
@@ -81,26 +90,35 @@ function renderWorkout() {
       <p class="mut" style="margin:0 0 6px">ریکاوری هم بخشی از تمرینه. عضله موقع استراحت رشد می‌کنه.</p>
       <div class="row" style="justify-content:center;margin-top:12px"><span class="chip">${ic('footprints')} ۸ تا ۱۰ هزار قدم</span></div>
       <p class="mut small" style="margin:14px 0 0">برای تمرین خارج از برنامه، یکی از روزهای بالا رو انتخاب کن.</p></div>`));
-    v.append(rulesCard()); updateHeader(); return;
+    v.append(rulesCard()); updateHeader(); markFresh('workout'); return;
   }
   const day = DAYS.find(d => d.id === selDay);
   const mins = Math.round(day.ex.reduce((a, e) => a + e.sets * (restSec(e) + 45), 0) / 60 / 5) * 5;
   v.append(h(`<div class="card hero"><h2>${esc(day.title)}</h2><div class="row">
     <span class="chip">${ic('dumbbell')} ${fa(day.ex.length)} حرکت</span><span class="chip">${ic('list-checks')} ${fa(totalSets(day))} ست</span><span class="chip">${ic('timer')} حدود ${fa(mins)} دقیقه</span></div></div>`));
   v.append(rulesCard());
-  day.ex.forEach((ex, i) => v.append(exCard(day, ex, i)));
+  // first cards now, the rest right after first paint (keeps startup / day-switch tasks short)
+  const token = (v.dataset.r = String(+(v.dataset.r || 0) + 1));
+  day.ex.slice(0, 2).forEach((ex, i) => v.append(exCard(day, ex, i)));
+  const restEx = day.ex.slice(2);
   const sess = getSession(day.id);
   const end = h(`<div class="card"><div class="sec-title">${ic('flame')} بعد از تمرین</div>
     <label class="switch"><input type="checkbox" id="walk" ${sess?.walk ? 'checked' : ''}><span style="flex:1">۲۰ دقیقه پیاده‌روی تند<br><small class="mut">هدف روزانه: ۸ تا ۱۰ هزار قدم</small></span>${ic('footprints')}</label>
     <button class="btn block lg ${sess?.finished ? 'okb' : 'grad'}" id="finish" style="margin-top:12px">${ic(sess?.finished ? 'circle-check-big' : 'trophy')} ${sess?.finished ? 'جلسه ثبت شد' : 'پایان و ثبت جلسه'}</button></div>`);
-  $('#walk', end).onchange = (e) => { haptic(); updateSession(day.id, s => { s.walk = e.target.checked; }); };
+  $('#walk', end).onchange = (e) => { haptic(); updateSession(day.id, s => { s.walk = e.target.checked; }); markFresh('workout'); };
   $('#finish', end).onclick = () => {
     if (!doneSets(day)) { toast('هنوز هیچ ستی تیک نخورده'); return; }
     updateSession(day.id, s => { s.finished = true; }); stopTimer(); releaseWake(); haptic([20, 60, 20]);
     toast('جلسه ثبت شد — حالا ۲۰ دقیقه پیاده‌روی تند'); renderWorkout();
   };
   v.append(end);
-  updateHeader();
+  updateHeader(); markFresh('workout');
+  if (restEx.length) setTimeout(() => {
+    if (v.dataset.r !== token) return;
+    const frag = document.createDocumentFragment();
+    restEx.forEach((ex, i) => frag.append(exCard(day, ex, i + 2)));
+    end.before(frag);
+  }, 0);
 }
 function rulesCard() {
   return h(`<details class="card"><summary>${ic('shield-check')} قوانین برنامه ${ic('chevron-down', 'chev')}</summary>
@@ -134,7 +152,7 @@ function exCard(day, ex, idx) {
       <label class="pill"><input inputmode="numeric" enterkeyhint="done" aria-label="${unitLbl(ex)} ست ${fa(i + 1)}" value="${esc(s.r ?? '')}" placeholder="${ps ? fa(toNum(ps.r)) : fa(ex.max)}" data-k="r"></label>
       <button class="chk" aria-label="ست ${fa(i + 1)} انجام شد" aria-pressed="${!!s.done}">${ic('check')}</button></div>`);
     $$('input', row).forEach(inp => inp.addEventListener('change', () => {
-      updateSession(day.id, ss => { ss.sets[ex.id] ??= []; ss.sets[ex.id][i] ??= {}; const n = toNum(inp.value); ss.sets[ex.id][i][inp.dataset.k] = isNaN(n) ? '' : String(n); });
+      updateSession(day.id, ss => { ss.sets[ex.id] ??= []; ss.sets[ex.id][i] ??= {}; const n = toNum(inp.value); ss.sets[ex.id][i][inp.dataset.k] = isNaN(n) ? '' : String(n); }); markFresh('workout');
     }));
     $('.chk', row).onclick = () => {
       ensureAudio();
@@ -160,7 +178,7 @@ function exCard(day, ex, idx) {
         startTimer(restSec(ex), ex.name); requestWake();
       } else haptic(10);
       card.classList.toggle('done', isDone());
-      updateHeader();
+      updateHeader(); markFresh('workout');
     };
     box.append(row);
   }
@@ -170,6 +188,8 @@ function exCard(day, ex, idx) {
 /* ---------- rest timer ---------- */
 let actx; let tEnd = 0, tTotal = 0, tInt = null, tBeeped = false, tHide = null, tMin = false;
 const DIAL = 678.58;
+// unlock WebAudio on the very first touch (one-time cost), not inside the set-tick handler
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => ensureAudio(), { once: true, passive: true, capture: true }));
 function ensureAudio() { try { actx ??= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch { } }
 function beep() {
   if (!actx) return;
@@ -186,27 +206,31 @@ function startTimer(sec, label = '') {
   $('#timer-ex').textContent = label ? `ست بعدی: ${label}` : '';
   $('#timer-sub').textContent = `از ${mmss(sec)}`;
   $('#timer').classList.remove('over'); $('#timer-pill').classList.remove('over');
-  setTimerMin(false); tick(); clearInterval(tInt); tInt = setInterval(tick, 250);
+  setTimerMin(false); clearInterval(tInt); tInt = setInterval(tick, 250); tLastSec = null; tick();
 }
-function setTimerMin(m) { tMin = m; $('#timer').hidden = m; $('#timer-pill').hidden = !m; }
+function setTimerMin(m) { tMin = m; $('#timer').hidden = m; $('#timer-pill').hidden = !m; tLastSec = null; if (tInt || tBeeped) tick(); }
 function stopTimer() { clearInterval(tInt); tInt = null; clearTimeout(tHide); $('#timer').hidden = true; $('#timer-pill').hidden = true; }
+let tLastSec = null; const tEls = {};
 function tick() {
   const left = (tEnd - Date.now()) / 1000;
-  const txt = left > 0 ? mmss(Math.ceil(left)) : 'بزن بریم!';
-  $('#timer-time').textContent = txt; $('#timer-pill-t').textContent = left > 0 ? txt : 'وقتشه!';
-  $('#dial-fg').style.strokeDashoffset = DIAL * (1 - Math.max(0, Math.min(1, left / tTotal)));
+  const sec = left > 0 ? Math.ceil(left) : 0;
+  if (sec === tLastSec && left > 0) return; tLastSec = sec;
+  tEls.time ??= $('#timer-time'); tEls.pill ??= $('#timer-pill-t'); tEls.dial ??= $('#dial-fg');
+  const txt = left > 0 ? mmss(sec) : 'بزن بریم!';
+  if (tMin) tEls.pill.textContent = left > 0 ? txt : 'وقتشه!';
+  else { tEls.time.textContent = txt; tEls.dial.style.strokeDashoffset = DIAL * (1 - Math.max(0, Math.min(1, sec / tTotal))); }
   if (left <= 0 && !tBeeped) {
     tBeeped = true; beep(); haptic([300, 120, 300, 120, 500]);
     $('#timer').classList.add('over'); $('#timer-pill').classList.add('over'); $('#timer-sub').textContent = 'ست بعدی رو شروع کن';
     clearInterval(tInt); tHide = setTimeout(stopTimer, 12000);
   }
 }
-$('#t-minus').onclick = () => { haptic(); tEnd -= 15000; tick(); };
-$('#t-plus').onclick = () => { haptic(); if (tBeeped) { startTimer(15, ''); return; } tEnd += 15000; tTotal += 15; tick(); };
+$('#t-minus').onclick = () => { haptic(); tEnd -= 15000; tLastSec = null; tick(); };
+$('#t-plus').onclick = () => { haptic(); if (tBeeped) { startTimer(15, ''); return; } tEnd += 15000; tTotal += 15; tLastSec = null; tick(); };
 $('#t-skip').onclick = () => { haptic(); stopTimer(); };
 $('#t-min').onclick = () => { haptic(); setTimerMin(true); };
 $('#timer-pill').onclick = () => { haptic(); setTimerMin(false); };
-document.addEventListener('visibilitychange', () => { if (!document.hidden && tInt) tick(); if (!document.hidden && wakeWanted) requestWake(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && tInt) { tLastSec = null; tick(); } if (!document.hidden && wakeWanted) requestWake(); });
 
 /* ---------- wake lock ---------- */
 let wake = null, wakeWanted = false;
@@ -220,7 +244,7 @@ function sessionStats(s) {
   return { day, sets, vol };
 }
 function renderHistory() {
-  const v = $('#view-history'); v.innerHTML = '';
+  const v = $('#view-history'); v.innerHTML = ''; viewVer.history = dataVer;
   const list = Object.values(getSessions()).filter(s => Object.values(s.sets).flat().some(x => x?.done)).sort((a, b) => b.date.localeCompare(a.date) || b.ts - a.ts);
   if (!list.length) { v.append(h(`<div class="card empty"><div class="badge-ic">${ic('calendar-days')}</div><h3>هنوز جلسه‌ای ثبت نشده</h3><p class="small">از تب تمرین اولین ستت رو تیک بزن.</p></div>`)); return; }
   const since = Date.now() - 7 * 864e5;
@@ -247,7 +271,7 @@ function renderHistory() {
 
 /* ---------- body log ---------- */
 function renderBody() {
-  const v = $('#view-body'); v.innerHTML = '';
+  const v = $('#view-body'); v.innerHTML = ''; viewVer.body = dataVer;
   const log = LS.get('body', []).sort((a, b) => a.date.localeCompare(b.date));
   const last = log[log.length - 1], first = log[0];
   if (log.length) {
@@ -356,7 +380,7 @@ function next(auto = false) {
 function prev() { if (audio.currentTime > 4) { audio.currentTime = 0; return; } playAt(pos - 1); }
 audio.addEventListener('ended', () => { if (mState.repeat === 'one') { audio.currentTime = 0; audio.play(); } else next(true); });
 ['play', 'pause', 'loadedmetadata'].forEach(ev => audio.addEventListener(ev, updatePlayerUI));
-audio.addEventListener('timeupdate', updateProgress);
+audio.addEventListener('timeupdate', () => updateProgress());
 audio.addEventListener('error', () => { if (audio.getAttribute('src')) toast('پخش ممکن نشد — شاید آفلاینی و آهنگ ذخیره نشده'); });
 function setMediaSession(t) {
   if (!('mediaSession' in navigator)) return;
@@ -373,13 +397,23 @@ if ('mediaSession' in navigator) {
 const seek = $('#seek');
 seek.addEventListener('input', () => { seek.dragging = true; $('#p-cur').textContent = mmss(+seek.value); seek.style.setProperty('--p', `${seek.max > 0 ? seek.value / seek.max * 100 : 0}%`); });
 seek.addEventListener('change', () => { audio.currentTime = +seek.value; seek.dragging = false; });
-function updateProgress() {
-  const d = audio.duration || 0, c = audio.currentTime || 0;
-  $('#mini-prog').style.width = d ? `${c / d * 100}%` : '0';
-  if (!seek.dragging) { seek.max = d || 0; seek.value = c; seek.style.setProperty('--p', `${d ? c / d * 100 : 0}%`); $('#p-cur').textContent = mmss(c); }
-  $('#p-dur').textContent = mmss(d);
-  if ('mediaSession' in navigator && d && isFinite(d)) { try { navigator.mediaSession.setPositionState({ duration: d, position: Math.min(c, d), playbackRate: audio.playbackRate }); } catch { } }
+// progress: at most one DOM write per second; seek/time only when the now-playing sheet is open
+const pEls = {}; let pLast = -1, pDur = -1;
+function updateProgress(force) {
+  const d = audio.duration || 0, c = audio.currentTime || 0, sec = Math.floor(c);
+  if (!force && sec === pLast) return; pLast = sec;
+  pEls.mini ??= $('#mini-prog'); pEls.np ??= $('#np'); pEls.cur ??= $('#p-cur'); pEls.dur ??= $('#p-dur');
+  if (!$('#mini').hidden) pEls.mini.style.transform = `scaleX(${d ? c / d : 0})`;
+  if (!pEls.np.hidden) {
+    if (!seek.dragging) { if (pDur !== d) { seek.max = d || 0; } seek.value = c; seek.style.setProperty('--p', `${d ? c / d * 100 : 0}%`); pEls.cur.textContent = mmss(c); }
+    if (pDur !== d) { pEls.dur.textContent = mmss(d); pDur = d; }
+  }
 }
+function syncPosition() {
+  const d = audio.duration;
+  if ('mediaSession' in navigator && d && isFinite(d)) { try { navigator.mediaSession.setPositionState({ duration: d, position: Math.min(audio.currentTime, d), playbackRate: audio.playbackRate }); } catch { } }
+}
+['loadedmetadata', 'play', 'pause', 'seeked', 'ratechange'].forEach(ev => audio.addEventListener(ev, syncPosition));
 const setUse = (btn, name) => { const u = btn.querySelector('use'); if (u) u.setAttribute('href', '#i-' + name); };
 function updatePlayerUI() {
   const t = curTrack(); const playing = !audio.paused;
@@ -394,9 +428,9 @@ function updatePlayerUI() {
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
   $$('#plist li').forEach(li => { const cur = li.dataset.id === t?.id; li.classList.toggle('cur', cur); li.classList.toggle('playing', cur && playing); });
   const npc = $('#np-card'); if (npc) { $('b', npc).textContent = t?.title || 'هنوز چیزی پخش نشده'; $('small', npc).textContent = t ? (playing ? 'در حال پخش — ' : 'متوقف — ') + t.artist : 'یه آهنگ از لیست انتخاب کن'; setUse($('.icon-btn', npc), playing ? 'pause' : 'play'); }
-  updateProgress();
+  updateProgress(true);
 }
-function openNP() { haptic(); $('#np').hidden = false; updatePlayerUI(); }
+function openNP() { haptic(); $('#np').hidden = false; pDur = -1; updatePlayerUI(); }
 function closeNP() { haptic(); $('#np').hidden = true; }
 $('#mini-play').onclick = togglePlay; $('#mini-next').onclick = () => { haptic(); next(); }; $('#mini-open').onclick = openNP;
 $('#np-close').onclick = closeNP; $('#np-list').onclick = () => { closeNP(); showTab('music'); };
@@ -450,7 +484,7 @@ function renderPlaylist() {
 
 /* ---------- about / backup ---------- */
 function renderAbout() {
-  const v = $('#view-about'); v.innerHTML = '';
+  const v = $('#view-about'); v.innerHTML = ''; viewVer.about = dataVer;
   v.append(h(`<div class="card" style="display:flex;align-items:center;gap:14px"><img src="icons/icon-192.png" width="64" height="64" alt="" style="border-radius:18px;box-shadow:0 10px 26px -10px rgba(255,45,85,.7)">
     <div><h3>باشگاه آرش</h3><p class="mut small" style="margin:0">برنامه ۴ روزه بالاتنه/پایین‌تنه — نسخه ۲</p></div></div>`));
   v.append(rulesCard());
@@ -466,7 +500,7 @@ function renderAbout() {
     const f = e.target.files[0]; if (!f) return;
     try { const j = JSON.parse(await f.text()); if (j.app !== 'gym-pwa' || !j.data) throw 0; if (!confirm('داده‌های فعلی با فایل پشتیبان جایگزین بشه؟')) return;
       Object.keys(localStorage).filter(k => k.startsWith('gym.')).forEach(k => localStorage.removeItem(k));
-      Object.entries(j.data).forEach(([k, val]) => localStorage.setItem(k, val)); mState = LS.get('music', mState); toast('بازیابی شد'); renderAbout(); updateHeader();
+      Object.entries(j.data).forEach(([k, val]) => localStorage.setItem(k, val)); LS.reset(); mState = LS.get('music', mState); toast('بازیابی شد'); renderAbout(); updateHeader();
     } catch { toast('فایل معتبر نیست'); }
     e.target.value = '';
   };
@@ -477,8 +511,10 @@ function renderAbout() {
 }
 
 /* ---------- boot ---------- */
+const idle = (fn) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 1500 }) : setTimeout(fn, 200));
 (async () => {
   updateHeader(); renderWorkout();
+  await new Promise(r => idle(r));
   await refreshCached(); await loadCustom();
   const last = playlist.findIndex(t => t.id === mState.last);
   if (last >= 0) { pos = order.indexOf(last); audio.src = curTrack().src; setMediaSession(curTrack()); }
